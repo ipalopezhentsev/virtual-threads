@@ -3,12 +3,66 @@
  */
 package org.example;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
+
 public class App {
-    public String getGreeting() {
-        return "Hello World!";
+    public String getGreeting() throws InterruptedException {
+        var threads = new ArrayList<Thread>();
+        var cnt = new AtomicLong();
+        var start = Instant.now();
+        for (int i = 0; i < 1_000_000; i++) {
+            var t = Thread.ofVirtual().start(() -> {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                cnt.incrementAndGet();
+            });
+            threads.add(t);
+        }
+        for (var t : threads) {
+            t.join();
+        }
+        var dur = Duration.between(start, Instant.now());
+        return "Hello World! cnt=" + cnt.get() + ", dur=" + dur.toString();
     }
 
-    public static void main(String[] args) {
-        System.out.println(new App().getGreeting());
+    public String getResult() throws InterruptedException, ExecutionException {
+        var execSvc = Executors.newVirtualThreadPerTaskExecutor();
+        //var execSvc = Executors.newCachedThreadPool();
+        int numIter = 5_000_000;
+        var futures = new ArrayList<Future<Integer>>(numIter);
+        var start = Instant.now();
+        for (int i = 0; i < numIter; i++) {
+            if (i % 1_000_000 == 0) {
+                System.out.println(i);
+            }
+            final Future<Integer> fut = execSvc.submit(() -> {
+                Thread.sleep(5000);
+                return 1;
+            });
+            futures.add(fut);
+        }
+        int sum = 0;
+        for (var f : futures) {
+            sum += f.get();
+        }
+        var dur = Duration.between(start, Instant.now());
+        return "sum=" + sum + ", dur=" + dur;
+    }
+
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
+        long maxHeapBytes = Runtime.getRuntime().maxMemory();
+        System.out.println("Max heap size (bytes): " + maxHeapBytes);
+        System.out.println("Max heap size (MB): " + (maxHeapBytes / (1024 * 1024)) + " MB");
+
+        System.out.println(new App().getResult());
     }
 }

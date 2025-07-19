@@ -41,3 +41,7 @@ tasks.named<Test>("test") {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
 }
+
+tasks.named<JavaExec>("run") {
+    jvmArgs = listOf("-Xmx2G")
+}
