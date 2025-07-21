@@ -17,7 +17,7 @@
             "request": "launch",
             "mainClass": "org.example.App",
             "projectName": "app",
-            "vmArgs": "-Xmx5g"
+            "vmArgs": "-Xmx5g --enable-preview"
         }
     ]
 }

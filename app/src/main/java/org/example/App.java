@@ -6,10 +6,16 @@ package org.example;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.StructuredTaskScope;
+import java.util.concurrent.StructuredTaskScope.Subtask;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 public class App {
     public String getGreeting() throws InterruptedException {
@@ -36,7 +42,7 @@ public class App {
 
     public String getResult() throws InterruptedException, ExecutionException {
         var execSvc = Executors.newVirtualThreadPerTaskExecutor();
-        //var execSvc = Executors.newCachedThreadPool();
+        // var execSvc = Executors.newCachedThreadPool();
         int numIter = 5_000_000;
         var futures = new ArrayList<Future<Integer>>(numIter);
         var start = Instant.now();
@@ -45,7 +51,7 @@ public class App {
                 System.out.println(i);
             }
             final Future<Integer> fut = execSvc.submit(() -> {
-                Thread.sleep(5000);
+                Thread.sleep(Duration.ofHours(1));
                 return 1;
             });
             futures.add(fut);
@@ -58,11 +64,74 @@ public class App {
         return "sum=" + sum + ", dur=" + dur;
     }
 
+    public String testStructuredScopeFailFast() throws InterruptedException {
+        // finishes with exception after 5 seconds, doesn't wait for the good task to
+        // finish
+        // try (var scope = new StructuredTaskScope<String>("testStrScope", new
+        // ThreadFactoryBuilder().build())) {
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+            final Subtask<String> t1 = scope.fork(new Callable<String>() {
+                public String call() throws InterruptedException {
+                    Thread.sleep(5_000_000);
+                    return "1";
+                }
+            });
+            final Subtask<String> t2 = scope.fork(() -> {
+                Thread.sleep(5_000);
+                throw new IllegalStateException("ERROR");
+            });
+            scope.join();
+            System.out.println("t2 state: " + t2.state());
+            return t1.get();
+        }
+    }
+
+    public String testStructuredScopeFastestWins() throws InterruptedException {
+        //returns good result after 3 seconds, cancels other task which was about to throw
+        try (var scope = new StructuredTaskScope.ShutdownOnSuccess<>()) {
+            final Subtask<String> t1 = scope.fork(new Callable<String>() {
+                public String call() throws InterruptedException {
+                    Thread.sleep(3_000);
+                    return "1";
+                }
+            });
+            final Subtask<String> t2 = scope.fork(() -> {
+                Thread.sleep(5_000_000);
+                throw new IllegalStateException("ERROR");
+            });
+            scope.join();
+            System.out.println("t2 state: " + t2.state());
+            return t1.get();
+        }
+    }
+
+    public String testStructuredScopeDefault() throws InterruptedException {
+        //on join(), waits for the longer task to finish, i.e. for 5000 secs
+        try (var scope = new StructuredTaskScope<>()) {
+            final Subtask<String> t1 = scope.fork(new Callable<String>() {
+                public String call() throws InterruptedException {
+                    Thread.sleep(3_000);
+                    return "1";
+                }
+            });
+            final Subtask<String> t2 = scope.fork(() -> {
+                Thread.sleep(5_000_000);
+                throw new IllegalStateException("ERROR");
+            });
+            scope.join();
+            System.out.println("t2 state: " + t2.state());
+            return t1.get();
+        }
+    }
+
     public static void main(String[] args) throws InterruptedException, ExecutionException {
         long maxHeapBytes = Runtime.getRuntime().maxMemory();
         System.out.println("Max heap size (bytes): " + maxHeapBytes);
         System.out.println("Max heap size (MB): " + (maxHeapBytes / (1024 * 1024)) + " MB");
+        System.out.println("PID: " + ProcessHandle.current().pid());
 
-        System.out.println(new App().getResult());
+        // System.out.println(new App().getResult());
+        //System.out.println(new App().testStructuredScopeFailFast());
+        System.out.println(new App().testStructuredScopeDefault());
     }
 }

@@ -37,11 +37,18 @@ application {
     mainClass = "org.example.App"
 }
 
+
+tasks.named<JavaCompile>("compileJava") {
+    options.compilerArgs.add("--enable-preview")
+}
+
 tasks.named<Test>("test") {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
+    jvmArgs = listOf("--enable-preview")
+    maxHeapSize = "2G"
 }
 
 tasks.named<JavaExec>("run") {
-    jvmArgs = listOf("-Xmx2G")
+    jvmArgs = listOf("--enable-preview", "-Xmx2G")
 }
